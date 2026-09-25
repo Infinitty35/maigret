@@ -393,6 +393,18 @@ The bypass is opt-in (`--cloudflare-bypass` or `cloudflare_bypass.enabled` in `s
 
 Add or fix new sites surgically in `data.json` (no `json.load`/`json.dump`), then run `./utils/update_site_data.py` to regenerate `sites.md` and the database metadata, and open a pull request. For more details, see the [CONTRIBUTING guide](https://github.com/soxoj/maigret/blob/main/CONTRIBUTING.md) and [development docs](https://maigret.readthedocs.io/en/latest/development.html). Release history: [CHANGELOG.md](CHANGELOG.md).
 
+### Fork sync workflow (GitHub Actions)
+
+This repository includes `.github/workflows/sync-forked-repositories.yml`, which can sync all forks owned by the authenticated GitHub account from each fork's upstream default branch.
+
+- **Schedule:** daily at `10:00` **UTC** (`cron: 0 10 * * *`). GitHub Actions cron schedules are UTC-only.
+- **Manual run:** use **Actions → Sync forked repositories → Run workflow** (`workflow_dispatch`).
+- **Auth and permissions:** set a repository (or organization) secret named `FORK_SYNC_TOKEN` to a PAT for the account that owns the forks.  
+  - Public forks: `public_repo` scope is typically enough.  
+  - Private forks: `repo` scope is required.
+- **Least privilege note:** the default `GITHUB_TOKEN` is used only as a fallback, but it usually cannot write to forks in other repositories.
+- **Behavior/limitations:** repositories without upstream metadata are skipped; failures are reported per repository while processing continues for remaining forks. GitHub API rate limits still apply.
+
 ## Commercial Use
 
 The open-source Maigret is MIT-licensed and free for commercial use without restriction — but site checks break over time and need active maintenance.
