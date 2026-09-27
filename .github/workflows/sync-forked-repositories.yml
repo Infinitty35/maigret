@@ -1,0 +1,76 @@
+name: Sync forked repositories
+
+on:
+  schedule:
+    # GitHub Actions cron uses UTC. 10:00 UTC runs daily at 10:00 AM UTC.
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-forks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync each fork from upstream default branch
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN || github.token }}
+        run: |
+          set -uo pipefail
+
+          actor="$(gh api user -q .login)"
+          echo "Authenticated as: ${actor}"
+          echo "Fetching repositories owned by authenticated user..."
+
+          repos_json="$(gh api --paginate '/user/repos?affiliation=owner&per_page=100' 2>/tmp/fork-sync-repos.err)"
+          status=$?
+          if [ "${status}" -ne 0 ]; then
+            echo "::error::Failed to list repositories for authenticated user."
+            cat /tmp/fork-sync-repos.err
+            exit 1
+          fi
+
+          forks="$(echo "${repos_json}" | jq -c '.[] | select(.fork == true)')"
+
+          if [ -z "${forks}" ]; then
+            echo "No forked repositories found for ${actor}."
+            exit 0
+          fi
+
+          success_count=0
+          failure_count=0
+          skipped_count=0
+
+          while IFS= read -r fork; do
+            [ -z "${fork}" ] && continue
+
+            full_name="$(echo "${fork}" | jq -r '.full_name')"
+            default_branch="$(echo "${fork}" | jq -r '.default_branch')"
+            upstream_full_name="$(echo "${fork}" | jq -r '.parent.full_name // empty')"
+
+            if [ -z "${upstream_full_name}" ]; then
+              echo "::notice::Skipping ${full_name}: no upstream repository metadata."
+              skipped_count=$((skipped_count + 1))
+              continue
+            fi
+
+            echo "Syncing ${full_name} (branch: ${default_branch}) from upstream ${upstream_full_name}..."
+
+            sync_output="$(gh api -X POST "repos/${full_name}/merge-upstream" -f branch="${default_branch}" 2>&1)"
+            sync_status=$?
+
+            if [ "${sync_status}" -eq 0 ]; then
+              echo "::notice::Synced ${full_name}"
+              success_count=$((success_count + 1))
+            else
+              echo "::warning::Failed to sync ${full_name}: ${sync_output}"
+              failure_count=$((failure_count + 1))
+            fi
+          done <<< "${forks}"
+
+          echo "Fork sync summary: ${success_count} succeeded, ${failure_count} failed, ${skipped_count} skipped."
+
+          if [ "${failure_count}" -gt 0 ]; then
+            exit 1
+          fi
