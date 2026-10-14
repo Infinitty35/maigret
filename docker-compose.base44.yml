@@ -1,0 +1,25 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.base44
+    ports:
+      - "3000:3000"
+    environment:
+      # Flask must bind to all interfaces for the preview proxy to reach it
+      - FLASK_HOST=0.0.0.0
+      - FLASK_DEBUG=true
+      - PYTHONUNBUFFERED=1
+      - BASE44_PREVIEW_MODE
+    volumes:
+      - .:/app
+    # Switch to an editable install (deps already in the image) then launch
+    # the Flask dev server with auto-reload enabled.
+    command: ["sh", "-ec", "pip install -e . --no-deps && exec python -m flask --app maigret.web.app run --host 0.0.0.0 --port 3000 --debug"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: on-failure

@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+# System build deps needed to compile Python packages (lxml, cairo, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential python3-dev pkg-config \
+      libcairo2-dev libxml2-dev libxslt1-dev \
+      curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install all Python dependencies during the build so container restarts
+# are fast.  The source is bind-mounted at runtime, so we only need an
+# editable install link on startup (see docker-compose.base44.yml).
+COPY . .
+RUN YARL_NO_EXTENSIONS=1 pip install --no-cache-dir .
